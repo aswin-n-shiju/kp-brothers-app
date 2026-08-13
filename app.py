@@ -83,7 +83,7 @@ def get_gspread_client():
 def get_worksheet():
     """Connects to the specific Google Sheet URL."""
     gc = get_gspread_client()
-    sheet = gc.open_by_url(st.secrets["google_sheets"]["https://docs.google.com/spreadsheets/d/1PvUMKvR3W2r2jOJhCuagxPtPVGye2PtVfKKP-vzVPVY/edit?gid=0#gid=0"])
+    sheet = gc.open_by_url(st.secrets["google_sheets"]["url"])
     return sheet.sheet1
 
 
