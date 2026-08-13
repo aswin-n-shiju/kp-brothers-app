@@ -12,24 +12,15 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom Styling for Client Polish
 st.markdown("""
 <style>
-    /* Global background and font styling */
-    .main {
-        background-color: #f8f9fa;
-    }
-    /* Card headers */
-    .stHeader {
-        color: #1E3A8A;
-    }
-    /* Metric Card Styling */
+    .main { background-color: #f8f9fa; }
+    .stHeader { color: #1E3A8A; }
     div[data-testid="stMetricValue"] {
         font-size: 1.6rem !important;
         font-weight: 700;
         color: #1E3A8A;
     }
-    /* Custom button polish */
     .stButton>button {
         border-radius: 8px;
         font-weight: 600;
@@ -38,29 +29,33 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# --- 2. SECURITY: LOGIN SCREEN ---
+# --- 2. SECURITY: MULTI-USER LOGIN ---
 def check_password():
-    """Returns `True` if the user has the correct password."""
-    def password_entered():
-        if st.session_state["password"] == st.secrets["app_password"]:
-            st.session_state["password_correct"] = True
-            del st.session_state["password"] 
-        else:
-            st.session_state["password_correct"] = False
-
-    if "password_correct" not in st.session_state:
-        st.title("🔒 KP_Brothers Portal")
-        st.subheader("Restricted Access")
-        st.text_input("Please enter the master password:", type="password", on_change=password_entered, key="password")
-        return False
-    elif not st.session_state["password_correct"]:
-        st.title("🔒 KP_Brothers Portal")
-        st.subheader("Restricted Access")
-        st.text_input("Please enter the master password:", type="password", on_change=password_entered, key="password")
-        st.error("🚫 Incorrect password. Please try again.")
-        return False
-    else:
+    """Checks the username and password against secrets.toml."""
+    if st.session_state.get("password_correct", False):
         return True
+        
+    # Professional Login Screen
+    st.title("🔒 KP_Brothers Portal")
+    st.subheader("Authorized Personnel Only")
+    
+    with st.form("login_form"):
+        username = st.text_input("Username").strip()
+        password = st.text_input("Password", type="password")
+        submit = st.form_submit_button("Secure Login", use_container_width=True)
+        
+        if submit:
+            # Verify if credentials block exists in secrets and if username matches
+            if "credentials" in st.secrets and username in st.secrets["credentials"]:
+                if st.secrets["credentials"][username] == password:
+                    st.session_state["password_correct"] = True
+                    st.session_state["logged_in_user"] = username
+                    st.rerun()
+                else:
+                    st.error("🚫 Incorrect password.")
+            else:
+                st.error("🚫 Unknown username.")
+    return False
 
 if not check_password():
     st.stop() 
@@ -69,7 +64,6 @@ if not check_password():
 # --- 3. GOOGLE SHEETS CONNECTION ---
 @st.cache_resource
 def get_gspread_client():
-    """Authenticates with Google using the secrets file."""
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive"
@@ -81,23 +75,21 @@ def get_gspread_client():
     return gspread.authorize(credentials)
 
 def get_worksheet():
-    """Connects to the specific Google Sheet URL."""
     gc = get_gspread_client()
     sheet = gc.open_by_url(st.secrets["google_sheets"]["url"])
     return sheet.sheet1
 
 
-# --- 4. DATA HANDLING FUNCTIONS (WITH CACHING FOR SPEED) ---
-@st.cache_data(ttl=120)  # Caches data for 2 mins to dramatically speed up app
+# --- 4. DATA HANDLING FUNCTIONS ---
+@st.cache_data(ttl=120)
 def load_data():
-    """Loads and formats data directly from the Google Sheet."""
     expected_columns = [
         "Date", "Client Name", "Vehicle Type", "Vehicle ID", "Driver Name",
         "Rate", "Qty/Hours", "Total Revenue", "Amount Received", "Client Balance Due",
         "Diesel Total", "Diesel Paid (Cash)", "Diesel Credit",
         "Basic Pay", "Overtime Hours", "Overtime Rate", "Wages Total", "Wages Paid (Cash)", "Wages Credit",
         "Oil Change Cost", "Tyre Cost", "Tyre Details", "Grease Cost", "Workshop Cost", "Workshop Comment",
-        "Total Expense", "Total Expense Paid", "Total Expense Credit"
+        "Total Expense", "Total Expense Paid", "Total Expense Credit", "Logged By"
     ]
     
     try:
@@ -123,6 +115,8 @@ def load_data():
                 df[col] = 200.0
             elif "Tyre Details" in col or "Workshop Comment" in col:
                 df[col] = "None"
+            elif col == "Logged By":
+                df[col] = "System"
             else:
                 df[col] = 0.0
                 
@@ -133,8 +127,7 @@ def save_entry(entry_date, client, v_type, v_id, driver,
                rate, qty, received, 
                diesel_tot, diesel_paid, 
                basic_pay, overtime_hours, overtime_rate, wages_paid,
-               oil_change, tyre_cost, tyre_details, grease, workshop_cost, workshop_comment):
-    """Calculates balances and appends a new row to Google Sheets."""
+               oil_change, tyre_cost, tyre_details, grease, workshop_cost, workshop_comment, logged_by):
     
     total_rev = rate * qty
     client_balance = total_rev - received
@@ -156,23 +149,20 @@ def save_entry(entry_date, client, v_type, v_id, driver,
         float(diesel_tot), float(diesel_paid), float(diesel_credit),
         float(basic_pay), float(overtime_hours), float(overtime_rate), float(wages_tot), float(wages_paid), float(wages_credit),
         float(oil_change), float(tyre_cost), tyre_details, float(grease), float(workshop_cost), workshop_comment.title(),
-        float(total_expense), float(total_expense_paid), float(total_expense_credit)
+        float(total_expense), float(total_expense_paid), float(total_expense_credit), logged_by
     ]
     
     worksheet = get_worksheet()
     worksheet.append_row(new_row)
-    st.cache_data.clear()  # Clear cache so new entry shows immediately
+    st.cache_data.clear()
 
 def overwrite_data(edited_df):
-    """Overwrites the entire Google Sheet when saving edits/deletions."""
     worksheet = get_worksheet()
     worksheet.clear()
-    
     edited_df["Date"] = edited_df["Date"].astype(str)
-    
     data_matrix = [edited_df.columns.values.tolist()] + edited_df.values.tolist()
     worksheet.update(data_matrix)
-    st.cache_data.clear()  # Clear cache after sync
+    st.cache_data.clear()
 
 
 # --- 5. LOAD INITIAL DATA ---
@@ -192,6 +182,10 @@ else:
 st.sidebar.image("https://img.icons8.com/color/96/dump-truck.png", width=64)
 st.sidebar.title("KP_Brothers")
 st.sidebar.caption("Fleet Management System")
+
+# Identify Current User
+current_user = st.session_state.get("logged_in_user", "Unknown")
+st.sidebar.info(f"👤 Logged in as: **{current_user.title()}**")
 
 tab_log, tab_filter = st.sidebar.tabs(["📝 Log Entry", "🔍 Filters"])
 
@@ -271,11 +265,10 @@ with tab_log:
                            rate, qty, amount_received, 
                            diesel_tot, diesel_paid, 
                            basic_pay, overtime_hours, overtime_rate, wages_paid,
-                           oil_change, tyre_cost, tyre_details, grease, workshop_cost, workshop_comment)
+                           oil_change, tyre_cost, tyre_details, grease, workshop_cost, workshop_comment, current_user)
             st.success(f"✅ Record saved for {final_vid.upper()}!")
             st.rerun()
 
-# --- 7. APPLY FILTERS ---
 with tab_filter:
     st.subheader("Filter Dashboard")
     if not df.empty:
@@ -295,11 +288,25 @@ with tab_filter:
         elif filter_type == "Date Range (Period)":
             date_range = st.date_input("Select Date Range", [datetime.today() - timedelta(days=30), datetime.today()])
 
+st.sidebar.divider()
+if st.sidebar.button("🚪 Logout", use_container_width=True):
+    st.session_state.clear()
+    st.rerun()
 
-# --- 8. MAIN DASHBOARD UI ---
+# --- 8. ROLE-BASED DASHBOARD UI ---
 st.title("🚛 KP_Brothers Operations Dashboard")
 
-tab_dash, tab_analytics, tab_edit = st.tabs(["📊 Financial Overview", "📈 Analytics & Charts", "✏️ Edit / Delete Database"])
+# Render tabs conditionally based on user role
+if current_user == "admin":
+    # Admin sees everything, including the Edit console
+    tabs = st.tabs(["📊 Financial Overview", "📈 Analytics & Charts", "⚙️ Admin Console"])
+    tab_dash, tab_analytics, tab_edit = tabs[0], tabs[1], tabs[2]
+else:
+    # Standard operators only see the Overview and Charts
+    tabs = st.tabs(["📊 Financial Overview", "📈 Analytics & Charts"])
+    tab_dash, tab_analytics = tabs[0], tabs[1]
+    tab_edit = None
+
 
 # --- TAB 1: FINANCIAL OVERVIEW ---
 with tab_dash:
@@ -321,7 +328,6 @@ with tab_dash:
         if filtered_df.empty:
             st.warning("No records match your selected filters.")
         else:
-            # Top Executive Metrics in Bordered Cards
             with st.container(border=True):
                 st.markdown("#### 💵 Key Financial Performance")
                 
@@ -350,7 +356,6 @@ with tab_dash:
 
             st.write(" ")
 
-            # Balances & Credit Trackers
             col_left, col_right = st.columns(2)
             
             with col_left:
@@ -377,15 +382,13 @@ with tab_dash:
 
             st.write(" ")
 
-            # Detailed Master Table
             with st.container(border=True):
                 col_tbl_hdr, col_btn = st.columns([4, 1])
                 col_tbl_hdr.markdown("#### 📋 Detailed Operations Log")
                 
-                # Export to CSV feature for client convenience
                 csv_data = filtered_df.to_csv(index=False).encode('utf-8')
                 col_btn.download_button(
-                    label="📥 Export Report (CSV)",
+                    label="📥 Export Report",
                     data=csv_data,
                     file_name=f"KP_Brothers_Report_{datetime.today().strftime('%Y_%m_%d')}.csv",
                     mime="text/csv",
@@ -405,6 +408,7 @@ with tab_dash:
                     
                     totals = {col: display_df[col].sum() for col in cols_to_sum}
                     totals["Date"] = "TOTAL" 
+                    totals["Logged By"] = ""
                     
                     total_row = pd.DataFrame([totals])
                     display_df = pd.concat([display_df, total_row], ignore_index=True)
@@ -446,21 +450,23 @@ with tab_analytics:
                 st.bar_chart(exp_breakdown, height=300)
 
 
-# --- TAB 3: EDIT DATABASE ---
-with tab_edit:
-    st.subheader("✏️ Edit Live Google Sheet Records")
-    st.caption("Double-click any cell to edit text/numbers, or check the box on the far left and press 'Delete' on your keyboard to remove a row.")
-    
-    if not df.empty:
-        edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
+# --- TAB 3: ADMIN CONSOLE (ONLY FOR 'admin') ---
+if tab_edit is not None:
+    with tab_edit:
+        st.subheader("⚙️ System Admin Console")
+        st.caption("⚠️ **Warning:** Any modifications made here permanently alter the Google Cloud Database. Proceed with caution.")
         
-        if st.button("💾 Sync Edits to Google Sheets", type="primary"):
-            with st.spinner("Updating Google Cloud Database..."):
-                try:
-                    overwrite_data(edited_df)
-                    st.success("✅ Changes successfully synced to Google Sheets!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error saving data: {e}")
-    else:
-        st.info("Your database is currently empty.")
+        if not df.empty:
+            with st.container(border=True):
+                edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
+                
+                if st.button("💾 Sync Database Override to Cloud", type="primary"):
+                    with st.spinner("Overwriting Google Cloud Database..."):
+                        try:
+                            overwrite_data(edited_df)
+                            st.success("✅ Database Override Successful!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error saving data: {e}")
+        else:
+            st.info("Your database is currently empty.")
