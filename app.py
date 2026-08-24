@@ -235,56 +235,56 @@ with tab_log:
     with st.container(border=True):
         st.markdown("##### 👤 Client Details")
         sel_client = st.selectbox("Select Saved Client", saved_clients)
-        new_client = st.text_input("OR New Client Name")
+        new_client = st.text_input("OR New Client Name", key="clear_client")
     
     with st.container(border=True):
         st.markdown("##### 🚜 Vehicle & Driver")
         v_col1, v_col2 = st.columns(2)
         sel_vid = v_col1.selectbox("Vehicle ID", saved_vids)
-        new_vid = v_col2.text_input("OR New ID")
+        new_vid = v_col2.text_input("OR New ID", key="clear_vid")
         
         d_col1, d_col2 = st.columns(2)
         sel_driver = d_col1.selectbox("Driver Name", saved_drivers)
-        new_driver = d_col2.text_input("OR New Driver")
+        new_driver = d_col2.text_input("OR New Driver", key="clear_driver")
     
     with st.container(border=True):
         st.markdown("##### 💰 Revenue Details")
         col_r1, col_r2 = st.columns(2)
-        rate = col_r1.number_input("Rate (₹)", min_value=0.0, step=50.0, format="%.2f")
-        qty = col_r2.number_input("Qty / Hours", min_value=0.0, step=0.5, format="%.1f")
+        rate = col_r1.number_input("Rate (₹)", min_value=0.0, step=50.0, format="%.2f", key="clear_rate")
+        qty = col_r2.number_input("Qty / Hours", min_value=0.0, step=0.5, format="%.1f", key="clear_qty")
         
         total_rev_calc = rate * qty
         if total_rev_calc > 0:
             st.info(f"**Total Bill:** ₹ {total_rev_calc:,.2f}")
             
-        amount_received = st.number_input("Amount Received (₹)", min_value=0.0, step=100.0, format="%.2f")
+        amount_received = st.number_input("Amount Received (₹)", min_value=0.0, step=100.0, format="%.2f", key="clear_received")
     
     with st.container(border=True):
         st.markdown("##### ⛽ Daily Operating Expenses")
         e_col1, e_col2 = st.columns(2)
-        diesel_tot = e_col1.number_input("Diesel Bill (₹)", min_value=0.0, step=100.0)
-        diesel_paid = e_col2.number_input("Diesel Paid Cash (₹)", min_value=0.0, step=100.0)
+        diesel_tot = e_col1.number_input("Diesel Bill (₹)", min_value=0.0, step=100.0, key="clear_dtot")
+        diesel_paid = e_col2.number_input("Diesel Paid Cash (₹)", min_value=0.0, step=100.0, key="clear_dpaid")
         
         st.markdown("---")
         st.markdown("**Driver Wages**")
         w_col1, w_col2 = st.columns(2)
-        basic_pay = w_col1.number_input("Basic Pay (₹)", min_value=0.0, step=50.0)
-        overtime_hours = w_col2.number_input("Overtime (Hrs)", min_value=0.0, step=0.5)
-        overtime_rate = st.number_input("OT Rate (₹/Hr)", min_value=0.0, value=200.0, step=50.0)
+        basic_pay = w_col1.number_input("Basic Pay (₹)", min_value=0.0, step=50.0, key="clear_bpay")
+        overtime_hours = w_col2.number_input("Overtime (Hrs)", min_value=0.0, step=0.5, key="clear_ot")
+        overtime_rate = st.number_input("OT Rate (₹/Hr)", min_value=0.0, value=200.0, step=50.0, key="clear_ot_rate")
         
         wages_tot_calc = basic_pay + (overtime_hours * overtime_rate)
         if wages_tot_calc > 0:
             st.info(f"**Total Wage:** ₹ {wages_tot_calc:,.2f}")
             
-        wages_paid = st.number_input("Wages Paid Cash (₹)", min_value=0.0, step=50.0)
+        wages_paid = st.number_input("Wages Paid Cash (₹)", min_value=0.0, step=50.0, key="clear_wpaid")
     
     with st.expander("🛠️ Maintenance & Repairs (Cash Paid)"):
-        oil_change = st.number_input("Oil Change (₹)", min_value=0.0, step=100.0)
-        tyre_cost = st.number_input("Tyre Cost (₹)", min_value=0.0, step=500.0)
-        tyre_details = st.selectbox("Tyre Position", ["None", "New - Front", "New - Back", "Used - Front", "Used - Back", "Puncture Repair"])
-        grease = st.number_input("Grease (₹)", min_value=0.0, step=50.0)
-        workshop_cost = st.number_input("Workshop Cost (₹)", min_value=0.0, step=100.0)
-        workshop_comment = st.text_input("Workshop Remarks")
+        oil_change = st.number_input("Oil Change (₹)", min_value=0.0, step=100.0, key="clear_oil")
+        tyre_cost = st.number_input("Tyre Cost (₹)", min_value=0.0, step=500.0, key="clear_tyre")
+        tyre_details = st.selectbox("Tyre Position", ["None", "New - Front", "New - Back", "Used - Front", "Used - Back", "Puncture Repair"], key="clear_tdet")
+        grease = st.number_input("Grease (₹)", min_value=0.0, step=50.0, key="clear_grease")
+        workshop_cost = st.number_input("Workshop Cost (₹)", min_value=0.0, step=100.0, key="clear_workshop")
+        workshop_comment = st.text_input("Workshop Remarks", key="clear_wcomm")
     
     if st.button("💾 Save Entry to Cloud", type="primary", use_container_width=True):
         final_client = new_client.strip() if new_client.strip() else (sel_client if sel_client != "-- Select --" else "")
@@ -300,43 +300,17 @@ with tab_log:
                            diesel_tot, diesel_paid, 
                            basic_pay, overtime_hours, overtime_rate, wages_paid,
                            oil_change, tyre_cost, tyre_details, grease, workshop_cost, workshop_comment, current_user)
+            
             st.success(f"✅ Record saved for {final_vid.upper()}!")
+            
+            # --- AUTO CLEARING LOGIC ---
+            # This deletes the memory of any input box with a key starting with "clear_"
+            for key in list(st.session_state.keys()):
+                if key.startswith("clear_"):
+                    del st.session_state[key]
+                    
+            # Refresh the page to show the empty boxes
             st.rerun()
-
-with tab_filter:
-    st.subheader("Filter Dashboard")
-    if not df.empty:
-        type_list = sorted(df['Vehicle Type'].unique().tolist())
-        selected_types = st.multiselect("Vehicle Type", type_list, default=type_list)
-        
-        client_list = sorted(df['Client Name'].unique().tolist())
-        selected_clients = st.multiselect("Client", client_list, default=client_list)
-        
-        driver_list = sorted(df['Driver Name'].unique().tolist())
-        selected_drivers = st.multiselect("Driver Name", driver_list, default=driver_list)
-        
-        filter_type = st.radio("Time Period", ["All Time", "Single Date", "Date Range (Period)"])
-        
-        if filter_type == "Single Date":
-            selected_date = st.date_input("Select Date", datetime.today())
-        elif filter_type == "Date Range (Period)":
-            date_range = st.date_input("Select Date Range", [datetime.today() - timedelta(days=30), datetime.today()])
-
-st.sidebar.divider()
-if st.sidebar.button("🚪 Logout", use_container_width=True):
-    st.session_state.clear()
-    st.rerun()
-
-# --- 8. ROLE-BASED DASHBOARD UI ---
-st.title("🚛 KP_Brothers Operations Dashboard")
-
-if current_user == "admin":
-    tabs = st.tabs(["📊 Financial Overview", "📈 Analytics & Charts", "⚙️ Admin Console"])
-    tab_dash, tab_analytics, tab_edit = tabs[0], tabs[1], tabs[2]
-else:
-    tabs = st.tabs(["📊 Financial Overview", "📈 Analytics & Charts"])
-    tab_dash, tab_analytics = tabs[0], tabs[1]
-    tab_edit = None
 
 
 # --- TAB 1: FINANCIAL OVERVIEW ---
