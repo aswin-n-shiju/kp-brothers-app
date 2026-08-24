@@ -277,13 +277,21 @@ with tab_log:
         workshop_cost = st.number_input("Workshop Cost (₹)", min_value=0.0, step=100.0, key="clear_workshop")
         workshop_comment = st.text_input("Workshop Remarks", key="clear_wcomm")
     
-    if st.button("💾 Save Entry to Cloud", type="primary", use_container_width=True):
-        final_client = new_client.strip() if new_client.strip() else (sel_client if sel_client != "-- Select --" else "")
-        final_vid = new_vid.strip() if new_vid.strip() else (sel_vid if sel_vid != "-- Select --" else "")
-        final_driver = new_driver.strip() if new_driver.strip() else (sel_driver if sel_driver != "-- Select --" else "")
+   if st.button("💾 Save Entry to Cloud", type="primary", use_container_width=True):
+        # Stronger logic to grab the text even if it's still processing
+        final_client = new_client.strip() if (new_client and new_client.strip()) else (sel_client if sel_client != "-- Select --" else "")
+        final_vid = new_vid.strip() if (new_vid and new_vid.strip()) else (sel_vid if sel_vid != "-- Select --" else "")
+        final_driver = new_driver.strip() if (new_driver and new_driver.strip()) else (sel_driver if sel_driver != "-- Select --" else "")
         
-        if not final_client or not final_vid or not final_driver:
-            st.error("⚠️ Client, Vehicle ID, and Driver Name are required.")
+        # Check exactly which fields are missing
+        missing_fields = []
+        if not final_client: missing_fields.append("Client Name")
+        if not final_vid: missing_fields.append("Vehicle ID")
+        if not final_driver: missing_fields.append("Driver Name")
+        
+        if missing_fields:
+            # Tell the user exactly what is missing!
+            st.error(f"⚠️ Missing Information: Please provide a **{', '.join(missing_fields)}**.")
         else:
             with st.spinner("Syncing to Google Sheets..."):
                 save_entry(entry_date, final_client, v_type, final_vid, final_driver, 
