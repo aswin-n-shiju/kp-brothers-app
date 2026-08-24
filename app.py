@@ -31,7 +31,6 @@ st.markdown("""
 
 # --- 2. SECURITY: MULTI-USER LOGIN ---
 def check_password():
-    """Checks the username and password against secrets.toml."""
     if st.session_state.get("password_correct", False):
         return True
         
@@ -155,8 +154,6 @@ def save_entry(entry_date, client, v_type, v_id, driver,
     st.cache_data.clear()
 
 def recalculate_dataframe(df, current_user):
-    """Automatically recalculates all math in the dataframe before saving."""
-    # Ensure numeric columns are actually numbers (fills blanks with 0)
     numeric_cols = [
         "Rate", "Qty/Hours", "Amount Received", "Diesel Total", "Diesel Paid (Cash)", 
         "Basic Pay", "Overtime Hours", "Overtime Rate", "Wages Paid (Cash)", 
@@ -165,11 +162,9 @@ def recalculate_dataframe(df, current_user):
     for col in numeric_cols:
         df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
         
-    # Recalculate Revenue
     df["Total Revenue"] = df["Rate"] * df["Qty/Hours"]
     df["Client Balance Due"] = df["Total Revenue"] - df["Amount Received"]
     
-    # Recalculate Expenses
     df["Wages Total"] = df["Basic Pay"] + (df["Overtime Hours"] * df["Overtime Rate"])
     df["Diesel Credit"] = df["Diesel Total"] - df["Diesel Paid (Cash)"]
     df["Wages Credit"] = df["Wages Total"] - df["Wages Paid (Cash)"]
@@ -180,16 +175,13 @@ def recalculate_dataframe(df, current_user):
     df["Total Expense Paid"] = df["Diesel Paid (Cash)"] + df["Wages Paid (Cash)"] + total_repair
     df["Total Expense Credit"] = df["Diesel Credit"] + df["Wages Credit"]
     
-    # Ensure any brand new rows created in the editor get tagged with the current user
     df["Logged By"] = df["Logged By"].replace("", current_user).fillna(current_user)
-    
     return df
 
 def overwrite_data(edited_df):
     worksheet = get_worksheet()
     worksheet.clear()
     
-    # JSON FIX: Fill any remaining empty spaces properly to prevent crashes
     clean_df = edited_df.copy()
     clean_df["Date"] = clean_df["Date"].astype(str)
     clean_df = clean_df.fillna("") 
@@ -217,7 +209,6 @@ st.sidebar.image("https://img.icons8.com/color/96/dump-truck.png", width=64)
 st.sidebar.title("KP_Brothers")
 st.sidebar.caption("Fleet Management System")
 
-# Identify Current User
 current_user = st.session_state.get("logged_in_user", "Unknown")
 st.sidebar.info(f"👤 Logged in as: **{current_user.title()}**")
 
@@ -303,17 +294,50 @@ with tab_log:
             
             st.success(f"✅ Record saved for {final_vid.upper()}!")
             
-            # --- AUTO CLEARING LOGIC ---
-            # This deletes the memory of any input box with a key starting with "clear_"
             for key in list(st.session_state.keys()):
                 if key.startswith("clear_"):
                     del st.session_state[key]
                     
-            # Refresh the page to show the empty boxes
             st.rerun()
 
+with tab_filter:
+    st.subheader("Filter Dashboard")
+    if not df.empty:
+        type_list = sorted(df['Vehicle Type'].unique().tolist())
+        selected_types = st.multiselect("Vehicle Type", type_list, default=type_list)
+        
+        client_list = sorted(df['Client Name'].unique().tolist())
+        selected_clients = st.multiselect("Client", client_list, default=client_list)
+        
+        driver_list = sorted(df['Driver Name'].unique().tolist())
+        selected_drivers = st.multiselect("Driver Name", driver_list, default=driver_list)
+        
+        filter_type = st.radio("Time Period", ["All Time", "Single Date", "Date Range (Period)"])
+        
+        if filter_type == "Single Date":
+            selected_date = st.date_input("Select Date", datetime.today())
+        elif filter_type == "Date Range (Period)":
+            date_range = st.date_input("Select Date Range", [datetime.today() - timedelta(days=30), datetime.today()])
 
-# --- TAB 1: FINANCIAL OVERVIEW ---
+st.sidebar.divider()
+if st.sidebar.button("🚪 Logout", use_container_width=True):
+    st.session_state.clear()
+    st.rerun()
+
+
+# --- 7. ROLE-BASED DASHBOARD UI ---
+st.title("🚛 KP_Brothers Operations Dashboard")
+
+if current_user == "admin":
+    tabs = st.tabs(["📊 Financial Overview", "📈 Analytics & Charts", "⚙️ Admin Console"])
+    tab_dash, tab_analytics, tab_edit = tabs[0], tabs[1], tabs[2]
+else:
+    tabs = st.tabs(["📊 Financial Overview", "📈 Analytics & Charts"])
+    tab_dash, tab_analytics = tabs[0], tabs[1]
+    tab_edit = None
+
+
+# --- 8. TAB 1: FINANCIAL OVERVIEW ---
 with tab_dash:
     if df.empty:
         st.info("No data available in Google Sheets. Add a record in the sidebar to get started.")
@@ -423,7 +447,7 @@ with tab_dash:
                 st.dataframe(display_df, use_container_width=True, hide_index=True)
 
 
-# --- TAB 2: VISUAL ANALYTICS & CHARTS ---
+# --- 9. TAB 2: VISUAL ANALYTICS & CHARTS ---
 with tab_analytics:
     if df.empty or filtered_df.empty:
         st.info("No data available to plot charts.")
@@ -455,7 +479,7 @@ with tab_analytics:
                 st.bar_chart(exp_breakdown, height=300)
 
 
-# --- TAB 3: ADMIN CONSOLE (ONLY FOR 'admin') ---
+# --- 10. TAB 3: ADMIN CONSOLE (ONLY FOR 'admin') ---
 if tab_edit is not None:
     with tab_edit:
         st.subheader("⚙️ System Admin Console")
@@ -468,9 +492,7 @@ if tab_edit is not None:
                 if st.button("💾 Recalculate & Sync to Cloud", type="primary"):
                     with st.spinner("Applying formulas and updating Google Cloud Database..."):
                         try:
-                            # 1. Apply all math formulas automatically
                             recalculated_df = recalculate_dataframe(edited_df, current_user)
-                            # 2. Overwrite the Google Sheet
                             overwrite_data(recalculated_df)
                             st.success("✅ Database Recalculated and Synced Successfully!")
                             st.rerun()
